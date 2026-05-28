@@ -1,4 +1,4 @@
-use soroban_sdk::{contracterror, contracttype, Address, BytesN, Env, String, Vec};
+use soroban_sdk::{contracterror, contracttype, Address, Bytes, BytesN, Env, String, Vec};
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -22,6 +22,14 @@ pub enum Error {
     XlmAddressNotSet = 16,
     ArithmeticOverflow = 17,
     ReentrancyGuard = 18,
+    ContractIsPaused = 19,
+    ReferrerCannotBeBuyerOrCreator = 20,
+    InvalidPaymentAmount = 21,
+    InvalidVoucher = 22,
+    InvalidReferralPercentage = 23,
+    InvalidDiscountPercentage = 24,
+    MaxSupplyReached = 25,
+    InvalidAsset = 26,
 }
 
 #[contracttype]
@@ -36,8 +44,23 @@ pub enum DataKey {
     BuyerPrompts(Address),
     Purchase(u128, Address),
     Reentrancy,
+    ReferralPercentage,
+    IsPaused,
+    VoucherKey(u128, BytesN<32>),
 }
 
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Purchase {
+    pub expires_at: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PricingConfig {
+    pub price: i128,
+    pub asset: Address,
+}
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -53,8 +76,10 @@ pub struct Prompt {
     pub wrapped_key: String,
     pub content_hash: BytesN<32>,
     pub price_stroops: i128,
+    pub asset: Address,
     pub active: bool,
     pub sales_count: u64,
+    pub max_supply: u64, // 0 = unlimited
 }
 
 pub trait PromptHashTrait {
@@ -77,7 +102,7 @@ pub trait PromptHashTrait {
         encryption_iv: String,
         wrapped_key: String,
         content_hash: BytesN<32>,
-        price_stroops: i128,
+        pricing: PricingConfig,
     ) -> Result<u128, Error>;
 
     fn set_prompt_sale_status(
@@ -87,6 +112,13 @@ pub trait PromptHashTrait {
         active: bool,
     ) -> Result<(), Error>;
 
+    fn set_prompt_max_supply(
+        env: Env,
+        creator: Address,
+        prompt_id: u128,
+        max_supply: u64,
+    ) -> Result<(), Error>;
+
     fn update_prompt_price(
         env: Env,
         creator: Address,
@@ -94,7 +126,22 @@ pub trait PromptHashTrait {
         price_stroops: i128,
     ) -> Result<(), Error>;
 
-    fn buy_prompt(env: Env, buyer: Address, prompt_id: u128) -> Result<(), Error>;
+    fn buy_prompt(
+        env: Env,
+        buyer: Address,
+        prompt_id: u128,
+        referrer: Option<Address>,
+        payment_amount_stroops: i128,
+        voucher: Option<Bytes>,
+    ) -> Result<(), Error>;
+
+    fn lease_prompt(
+        env: Env,
+        buyer: Address,
+        prompt_id: u128,
+        lease_duration_secs: u64,
+    ) -> Result<(), Error>;
+
     fn has_access(env: Env, user: Address, prompt_id: u128) -> Result<bool, Error>;
     fn get_prompt(env: Env, prompt_id: u128) -> Result<Prompt, Error>;
     fn get_all_prompts(env: Env) -> Result<Vec<Prompt>, Error>;
@@ -104,8 +151,24 @@ pub trait PromptHashTrait {
     fn set_fee_wallet(env: Env, new_fee_wallet: Address) -> Result<(), Error>;
     fn get_fee_percentage(env: Env) -> u32;
     fn get_fee_wallet(env: Env) -> Option<Address>;
+    fn set_referral_percentage(env: Env, new_referral_percentage: u32) -> Result<(), Error>;
+    fn get_referral_percentage(env: Env) -> u32;
+    fn set_pause_status(env: Env, paused: bool) -> Result<(), Error>;
+    fn is_paused(env: Env) -> bool;
+    fn add_voucher(
+        env: Env,
+        creator: Address,
+        prompt_id: u128,
+        hashed_code: BytesN<32>,
+        discount_bps: u32,
+    ) -> Result<(), Error>;
+    fn remove_voucher(
+        env: Env,
+        creator: Address,
+        prompt_id: u128,
+        hashed_code: BytesN<32>,
+    ) -> Result<(), Error>;
     fn get_xlm_sac(env: Env) -> Option<Address>;
     fn upgrade(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), Error>;
     fn extend_ttl(env: Env, key: DataKey) -> Result<(), Error>;
 }
-

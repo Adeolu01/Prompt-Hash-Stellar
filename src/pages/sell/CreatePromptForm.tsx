@@ -1,7 +1,10 @@
 import { ChangeEvent, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Loader2 } from "lucide-react";
+import {
+  ListingQualityChecklist,
+  buildChecklistItems,
+} from "@/components/sell/ListingQualityChecklist";
 import { featuredPromptTemplates } from "@/data/featuredPrompts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +25,6 @@ import {
 import { browserStellarConfig } from "@/lib/stellar/browserConfig";
 import { xlmToStroops } from "@/lib/stellar/format";
 import { createPrompt } from "@/lib/stellar/promptHashClient";
-import { invalidateAllPromptQueries } from "@/hooks/useContractSync";
 
 const limits = {
   title: 120,
@@ -48,7 +50,6 @@ interface FormData {
 
 export function CreatePromptForm() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { address, signTransaction } = useWallet();
   const [formData, setFormData] = useState<FormData>({
     imageUrl: "",
@@ -62,6 +63,7 @@ export function CreatePromptForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showChecklist, setShowChecklist] = useState(false);
 
   const isConfigured = useMemo(
     () =>
@@ -73,6 +75,13 @@ export function CreatePromptForm() {
       ),
     [address, signTransaction],
   );
+
+  const checklistItems = useMemo(
+    () => buildChecklistItems(formData),
+    [formData],
+  );
+
+  const checklistHasFailures = checklistItems.some((i) => i.status === "fail");
 
   const handleChange = (
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -144,6 +153,11 @@ export function CreatePromptForm() {
     setSubmitError(null);
     setSuccessMessage(null);
 
+    // Show checklist on first click so the creator can review quality
+    if (!showChecklist) {
+      setShowChecklist(true);
+    }
+
     if (!validateForm()) {
       return;
     }
@@ -195,8 +209,6 @@ export function CreatePromptForm() {
         },
       );
 
-      // Invalidate before navigating so the browse grid is fresh on arrival.
-      await invalidateAllPromptQueries(queryClient);
       setSuccessMessage(`Prompt #${promptId.toString()} created successfully.`);
       setFormData({
         imageUrl: "",
@@ -227,14 +239,16 @@ export function CreatePromptForm() {
 
       <div className="grid gap-6 md:grid-cols-2">
         <div className="space-y-2">
-          <label htmlFor="create-prompt-image-url" className="text-sm font-medium">
+          <label htmlFor="imageUrl" className="text-sm font-medium">
             Image URL
           </label>
           <Input
-            id="create-prompt-image-url"
+            id="imageUrl"
             name="imageUrl"
             value={formData.imageUrl}
             onChange={handleChange}
+            type="url"
+            autoComplete="url"
             placeholder="https://example.com/prompt-cover.png"
             className={errors.imageUrl ? "border-red-500" : ""}
           />
@@ -246,14 +260,15 @@ export function CreatePromptForm() {
           ) : null}
         </div>
         <div className="space-y-2">
-          <label htmlFor="create-prompt-title" className="text-sm font-medium">
+          <label htmlFor="title" className="text-sm font-medium">
             Title
           </label>
           <Input
-            id="create-prompt-title"
+            id="title"
             name="title"
             value={formData.title}
             onChange={handleChange}
+            autoComplete="off"
             placeholder="Board-ready launch plan"
             className={errors.title ? "border-red-500" : ""}
           />
@@ -271,11 +286,11 @@ export function CreatePromptForm() {
 
       <div className="grid gap-6 md:grid-cols-[1fr_220px]">
         <div className="space-y-2">
-          <label htmlFor="create-prompt-preview" className="text-sm font-medium">
+          <label htmlFor="previewText" className="text-sm font-medium">
             Preview text
           </label>
           <Textarea
-            id="create-prompt-preview"
+            id="previewText"
             name="previewText"
             value={formData.previewText}
             onChange={handleChange}
@@ -294,13 +309,12 @@ export function CreatePromptForm() {
           ) : null}
         </div>
         <div className="space-y-2">
-          <label htmlFor="create-prompt-category" className="text-sm font-medium">
+          <label htmlFor="category" className="text-sm font-medium">
             Category
           </label>
           <Select value={formData.category} onValueChange={handleCategoryChange}>
             <SelectTrigger
-              id="create-prompt-category"
-              aria-label="Category"
+              id="category"
               className={errors.category ? "border-red-500" : ""}
             >
               <SelectValue placeholder="Select category" />
@@ -320,14 +334,16 @@ export function CreatePromptForm() {
             </p>
           ) : null}
 
-          <label htmlFor="create-prompt-price" className="pt-3 text-sm font-medium">
+          <label htmlFor="priceXlm" className="pt-3 text-sm font-medium">
             Price in XLM
           </label>
           <Input
-            id="create-prompt-price"
+            id="priceXlm"
             name="priceXlm"
             value={formData.priceXlm}
             onChange={handleChange}
+            inputMode="decimal"
+            autoComplete="off"
             placeholder="2.5"
             className={errors.priceXlm ? "border-red-500" : ""}
           />
@@ -341,14 +357,15 @@ export function CreatePromptForm() {
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="create-prompt-full-prompt" className="text-sm font-medium">
+        <label htmlFor="fullPrompt" className="text-sm font-medium">
           Full prompt
         </label>
         <Textarea
-          id="create-prompt-full-prompt"
+          id="fullPrompt"
           name="fullPrompt"
           value={formData.fullPrompt}
           onChange={handleChange}
+          autoComplete="off"
           rows={12}
           placeholder="This plaintext is encrypted in the browser, then only encrypted fields are sent on-chain."
           className={errors.fullPrompt ? "border-red-500" : ""}
@@ -361,9 +378,13 @@ export function CreatePromptForm() {
         ) : null}
       </div>
 
+      {showChecklist ? (
+        <ListingQualityChecklist items={checklistItems} />
+      ) : null}
+
       <Button
         className="w-full bg-emerald-400 text-slate-950 hover:bg-emerald-300"
-        disabled={isSubmitting}
+        disabled={isSubmitting || (showChecklist && checklistHasFailures)}
         onClick={handleSubmit}
       >
         {isSubmitting ? (

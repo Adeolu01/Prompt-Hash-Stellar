@@ -2,10 +2,12 @@ import { createChallengeToken } from "../../src/lib/auth/challenge";
 import { withObservability } from "../../src/lib/observability/wrapper";
 import { checkRateLimit } from "../../src/lib/observability/rateLimiter";
 import { metrics } from "../../src/lib/observability/metrics";
+import { recordAuditEvent } from "../../server/src/services/auditTrail";
+import { apiError, ErrorCode } from "../../src/lib/api/errorCodes";
 
 async function handler(req: any, res: any) {
   if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed." });
+    res.status(405).json(apiError(ErrorCode.METHOD_NOT_ALLOWED, "Method not allowed."));
     return;
   }
 
@@ -20,13 +22,23 @@ async function handler(req: any, res: any) {
   if (!rateLimit.success) {
     req.logger.warn({ clientIp }, "Rate limit exceeded for challenge issuance");
     metrics.trackRateLimitHit("challenge", clientIp);
+    void recordAuditEvent({
+      action: "challenge_rate_limited",
+      result: "blocked",
+      promptId: address && promptId ? String(promptId) : null,
+      walletAddress: address ? String(address) : null,
+      requestId: req.requestId ?? null,
+      clientIp,
+      reason: "rate_limit_exceeded",
+    });
     res.setHeader("X-RateLimit-Limit", rateLimit.limit);
     res.setHeader("X-RateLimit-Remaining", 0);
     res.setHeader("X-RateLimit-Reset", rateLimit.reset);
-    res.status(429).json({
-      error: "Too many requests. Please try again later.",
-      reset: rateLimit.reset,
-    });
+    res.status(429).json(
+      apiError(ErrorCode.RATE_LIMIT_IP, "Too many requests. Please try again later.", {
+        reset: rateLimit.reset,
+      }),
+    );
     return;
   }
 
@@ -37,12 +49,14 @@ async function handler(req: any, res: any) {
   const secret = process.env.CHALLENGE_TOKEN_SECRET;
   if (!secret) {
     req.logger.error("CHALLENGE_TOKEN_SECRET is not configured.");
-    res.status(500).json({ error: "Configuration error." });
+    res.status(500).json(apiError(ErrorCode.CONFIGURATION_ERROR, "Configuration error."));
     return;
   }
 
   if (!address || !promptId) {
-    res.status(400).json({ error: "address and promptId are required." });
+    res.status(400).json(
+      apiError(ErrorCode.MISSING_FIELDS, "address and promptId are required."),
+    );
     return;
   }
 
@@ -50,6 +64,16 @@ async function handler(req: any, res: any) {
 
   metrics.trackChallengeIssued(String(address), String(promptId));
   req.logger.info({ address, promptId }, "Challenge token issued successfully");
+
+  void recordAuditEvent({
+    action: "challenge_issued",
+    result: "success",
+    promptId: String(promptId),
+    walletAddress: String(address),
+    requestId: req.requestId ?? null,
+    clientIp,
+    reason: null,
+  });
 
   res.status(200).json(challenge);
 }

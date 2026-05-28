@@ -6,6 +6,7 @@ struct PromptCreated {
     pub prompt_id: u128,
     pub creator: Address,
     pub price_stroops: i128,
+    pub asset: Address,
 }
 
 #[contractevent]
@@ -29,6 +30,35 @@ struct PromptPurchased {
     pub buyer: Address,
     pub creator: Address,
     pub price_stroops: i128,
+    pub referrer: Option<Address>,
+}
+
+#[contractevent]
+struct PromptTipped {
+    #[topic]
+    pub prompt_id: u128,
+    pub buyer: Address,
+    pub amount_tipped: i128,
+}
+
+#[contractevent]
+struct VoucherAdded {
+    #[topic]
+    pub prompt_id: u128,
+    pub hashed_code: soroban_sdk::BytesN<32>,
+    pub discount_bps: u32,
+}
+
+#[contractevent]
+struct VoucherRemoved {
+    #[topic]
+    pub prompt_id: u128,
+    pub hashed_code: soroban_sdk::BytesN<32>,
+}
+
+#[contractevent]
+struct ContractPausedStateChanged {
+    pub is_paused: bool,
 }
 
 #[contractevent]
@@ -46,11 +76,18 @@ struct FeeWalletUpdated {
 pub struct Events;
 
 impl Events {
-    pub fn emit_prompt_created(env: &Env, prompt_id: u128, creator: Address, price_stroops: i128) {
+    pub fn emit_prompt_created(
+        env: &Env,
+        prompt_id: u128,
+        creator: Address,
+        price_stroops: i128,
+        asset: Address,
+    ) {
         PromptCreated {
             prompt_id,
             creator,
             price_stroops,
+            asset,
         }
         .publish(env);
     }
@@ -73,14 +110,51 @@ impl Events {
         buyer: Address,
         creator: Address,
         price_stroops: i128,
+        referrer: Option<Address>,
     ) {
         PromptPurchased {
             prompt_id,
             buyer,
             creator,
             price_stroops,
+            referrer,
         }
         .publish(env);
+    }
+
+    pub fn emit_prompt_tipped(env: &Env, prompt_id: u128, buyer: Address, amount_tipped: i128) {
+        PromptTipped {
+            prompt_id,
+            buyer,
+            amount_tipped,
+        }
+        .publish(env);
+    }
+
+    pub fn emit_voucher_added(
+        env: &Env,
+        prompt_id: u128,
+        hashed_code: soroban_sdk::BytesN<32>,
+        discount_bps: u32,
+    ) {
+        VoucherAdded {
+            prompt_id,
+            hashed_code,
+            discount_bps,
+        }
+        .publish(env);
+    }
+
+    pub fn emit_voucher_removed(env: &Env, prompt_id: u128, hashed_code: soroban_sdk::BytesN<32>) {
+        VoucherRemoved {
+            prompt_id,
+            hashed_code,
+        }
+        .publish(env);
+    }
+
+    pub fn emit_contract_paused_state_changed(env: &Env, is_paused: bool) {
+        ContractPausedStateChanged { is_paused }.publish(env);
     }
 
     pub fn emit_fee_updated(env: &Env, new_fee_percentage: u32) {
