@@ -1,11 +1,12 @@
 import { useMemo, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, ArchiveRestore, Eye, Loader2, LockKeyhole, PackagePlus, ShoppingBag, ToggleLeft, ToggleRight } from "lucide-react";
+import { Archive, ArchiveRestore, Eye, History, Loader2, LockKeyhole, PackagePlus, ShoppingBag, ToggleLeft, ToggleRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { CreatorDashboard } from "@/components/sell/CreatorDashboard";
+import { PostVersionUpdate } from "@/components/PostVersionUpdate";
 import { useWallet } from "@/hooks/useWallet";
 import { browserStellarConfig } from "@/lib/stellar/browserConfig";
 import {
@@ -55,7 +56,6 @@ const MyPrompts = ({ onCreateNew }: MyPromptsProps) => {
   const createdPrompts = createdQuery.data ?? [];
   const purchasedPrompts = purchasedQuery.data ?? [];
 
-  // Load archived IDs from localStorage whenever the wallet address changes
   useEffect(() => {
     if (address) {
       setArchivedIds(getArchivedPromptIds(address));
@@ -73,7 +73,6 @@ const MyPrompts = ({ onCreateNew }: MyPromptsProps) => {
     );
   }, [createdPrompts, priceDrafts]);
 
-  // Split into active (non-archived) and archived lists
   const activeCreatedPrompts = useMemo(
     () => createdPrompts.filter((p) => !archivedIds.has(p.id.toString())),
     [createdPrompts, archivedIds],
@@ -276,114 +275,128 @@ const MyPrompts = ({ onCreateNew }: MyPromptsProps) => {
             {/* Active prompts grid */}
             {activeCreatedPrompts.length > 0 && (
               <div className="grid gap-6 xl:grid-cols-2">
-              {activeCreatedPrompts.map((prompt) => (
-                <Card
-                  key={prompt.id.toString()}
-                  className="border-white/10 bg-slate-950/70 text-white"
-                >
-                  <div className="aspect-video overflow-hidden rounded-t-xl">
-                    <img
-                      src={prompt.imageUrl || "/images/codeguru.png"}
-                      alt={prompt.title}
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                  <CardContent className="space-y-4 p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
-                          {prompt.category}
-                        </p>
-                        <h3 className="mt-2 text-xl font-semibold">{prompt.title}</h3>
-                        <p className="mt-3 text-sm leading-6 text-slate-300">
-                          {prompt.previewText}
-                        </p>
-                      </div>
-                      {/* Status badge */}
-                      {prompt.active ? (
-                        <span className="mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-400">
-                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                          Active
-                        </span>
-                      ) : (
-                        <span className="mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-500/25 bg-slate-500/10 px-2.5 py-1 text-xs font-semibold text-slate-400">
-                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                          Inactive
-                        </span>
-                      )}
+                {activeCreatedPrompts.map((prompt) => (
+                  <Card
+                    key={prompt.id.toString()}
+                    className="border-white/10 bg-slate-950/70 text-white"
+                  >
+                    <div className="aspect-video overflow-hidden rounded-t-xl">
+                      <img
+                        src={prompt.imageUrl || "/images/codeguru.png"}
+                        alt={prompt.title}
+                        className="h-full w-full object-cover"
+                      />
                     </div>
-                    <div className="grid grid-cols-2 gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                          Sales
-                        </p>
-                        <p className="mt-2 font-medium text-slate-100">
-                          {prompt.salesCount}
-                        </p>
+                    <CardContent className="space-y-4 p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
+                            {prompt.category}
+                          </p>
+                          <h3 className="mt-2 text-xl font-semibold">{prompt.title}</h3>
+                          <p className="mt-3 text-sm leading-6 text-slate-300">
+                            {prompt.previewText}
+                          </p>
+                        </div>
+                        {/* Status badge */}
+                        {prompt.active ? (
+                          <span className="mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-400">
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                            Active
+                          </span>
+                        ) : (
+                          <span className="mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-500/25 bg-slate-500/10 px-2.5 py-1 text-xs font-semibold text-slate-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                            Inactive
+                          </span>
+                        )}
                       </div>
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                          Current price
-                        </p>
-                        <p className="mt-2 font-medium text-slate-100">
-                          {formatPriceLabel(prompt.priceStroops)}
-                        </p>
+                      <div className="grid grid-cols-3 gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                            Sales
+                          </p>
+                          <p className="mt-2 font-medium text-slate-100">
+                            {prompt.salesCount}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                            Current price
+                          </p>
+                          <p className="mt-2 font-medium text-slate-100">
+                            {formatPriceLabel(prompt.priceStroops)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                            Revision
+                          </p>
+                          <p className="mt-2 font-medium text-slate-100">
+                            {"revision" in prompt ? prompt.revision : 0}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex gap-3">
-                      <Input
-                        value={mergedDrafts[prompt.id.toString()]}
-                        onChange={(event) =>
-                          setPriceDrafts((current) => ({
-                            ...current,
-                            [prompt.id.toString()]: event.target.value,
-                          }))
-                        }
-                        className="border-white/10 bg-white/5 text-slate-100"
-                        aria-label={`Price in XLM for ${prompt.title}`}
+                      <div className="flex gap-3">
+                        <Input
+                          value={mergedDrafts[prompt.id.toString()]}
+                          onChange={(event) =>
+                            setPriceDrafts((current) => ({
+                              ...current,
+                              [prompt.id.toString()]: event.target.value,
+                            }))
+                          }
+                          className="border-white/10 bg-white/5 text-slate-100"
+                          aria-label={`Price in XLM for ${prompt.title}`}
+                        />
+                        <Button
+                          className="bg-emerald-400 text-slate-950 hover:bg-emerald-300"
+                          onClick={() => void handleUpdatePrice(prompt.id)}
+                          disabled={busyPromptId === prompt.id.toString()}
+                        >
+                          Update price
+                        </Button>
+                      </div>
+                    </CardContent>
+                    <CardFooter className="p-5 pt-0 flex flex-col gap-2">
+                      <PostVersionUpdate
+                        promptId={prompt.id.toString()}
+                        promptTitle={prompt.title}
+                        walletAddress={address ?? ""}
+                        currentVersion={("revision" in prompt ? prompt.revision : 0) + 1}
                       />
                       <Button
-                        className="bg-emerald-400 text-slate-950 hover:bg-emerald-300"
-                        onClick={() => void handleUpdatePrice(prompt.id)}
+                        variant="outline"
+                        className={`w-full gap-2 border-white/10 text-slate-100 hover:bg-white/10 ${
+                          prompt.active
+                            ? "bg-white/5 hover:border-red-400/30 hover:text-red-300"
+                            : "bg-emerald-500/10 border-emerald-500/20 hover:border-emerald-400/40 text-emerald-400"
+                        }`}
+                        onClick={() => void handleToggleSaleStatus(prompt.id, prompt.active)}
                         disabled={busyPromptId === prompt.id.toString()}
                       >
-                        Update price
+                        {busyPromptId === prompt.id.toString() ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : prompt.active ? (
+                          <ToggleRight className="h-4 w-4" />
+                        ) : (
+                          <ToggleLeft className="h-4 w-4" />
+                        )}
+                        {prompt.active ? "Deactivate listing" : "Reactivate listing"}
                       </Button>
-                    </div>
-                  </CardContent>
-                  <CardFooter className="p-5 pt-0 flex flex-col gap-2">
-                    <Button
-                      variant="outline"
-                      className={`w-full gap-2 border-white/10 text-slate-100 hover:bg-white/10 ${
-                        prompt.active
-                          ? "bg-white/5 hover:border-red-400/30 hover:text-red-300"
-                          : "bg-emerald-500/10 border-emerald-500/20 hover:border-emerald-400/40 text-emerald-400"
-                      }`}
-                      onClick={() => void handleToggleSaleStatus(prompt.id, prompt.active)}
-                      disabled={busyPromptId === prompt.id.toString()}
-                    >
-                      {busyPromptId === prompt.id.toString() ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : prompt.active ? (
-                        <ToggleRight className="h-4 w-4" />
-                      ) : (
-                        <ToggleLeft className="h-4 w-4" />
-                      )}
-                      {prompt.active ? "Deactivate listing" : "Reactivate listing"}
-                    </Button>
-                    {/* #261 — Archive action */}
-                    <Button
-                      variant="outline"
-                      className="w-full gap-2 border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-amber-300 hover:border-amber-400/30"
-                      onClick={() => handleArchive(prompt.id.toString())}
-                    >
-                      <Archive className="h-4 w-4" />
-                      Archive listing
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))}
-            </div>
+                      {/* #261 — Archive action */}
+                      <Button
+                        variant="outline"
+                        className="w-full gap-2 border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-amber-300 hover:border-amber-400/30"
+                        onClick={() => handleArchive(prompt.id.toString())}
+                      >
+                        <Archive className="h-4 w-4" />
+                        Archive listing
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ))}
+              </div>
             )}
 
             {/* Archived prompts */}

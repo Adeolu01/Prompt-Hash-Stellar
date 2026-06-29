@@ -9,9 +9,16 @@ export const LISTING_LIMITS = {
   encryptedPayload: 4096,
   wrappedKey: 256,
   encryptionIv: 64,
+  maxCoCreators: 10,
+  maxSplitBps: 9_500,
 } as const;
 
 export const ESTIMATED_ENCRYPTION_OVERHEAD = 1.37;
+
+export type RevenueSplitFormInput = {
+  address: string;
+  sharePercent: string;
+};
 
 export type ListingFormInput = {
   imageUrl: string;
@@ -20,6 +27,7 @@ export type ListingFormInput = {
   previewText: string;
   fullPrompt: string;
   priceXlm: string;
+  coCreators: RevenueSplitFormInput[];
 };
 
 export type ListingValidationErrors = Partial<
@@ -44,6 +52,8 @@ export interface ListingChecklistItem {
   hint?: string;
 }
 
+const STELLAR_ADDRESS_PATTERN = /^[GC][A-Z2-7]{20,}$/i;
+
 function trim(value: string) {
   return value.trim();
 }
@@ -59,6 +69,7 @@ export function validateListingForm(
   const previewText = trim(input.previewText);
   const fullPrompt = trim(input.fullPrompt);
   const priceXlm = trim(input.priceXlm);
+  const coCreators = input.coCreators ?? [];
 
   if (!imageUrl) {
     errors.imageUrl = "Add an image URL so your listing has a cover on browse cards.";
@@ -85,7 +96,7 @@ export function validateListingForm(
 
   if (!previewText) {
     errors.previewText =
-      "Add preview text — this public snippet appears on browse cards before purchase.";
+      "Add preview text â€” this public snippet appears on browse cards before purchase.";
   } else if (previewText.length < 10) {
     errors.previewText =
       "Write at least 10 characters of preview text so buyers know what they are getting.";
@@ -95,7 +106,7 @@ export function validateListingForm(
 
   if (!fullPrompt) {
     errors.fullPrompt =
-      "Paste the full prompt content — it is encrypted in your browser before submission.";
+      "Paste the full prompt content â€” it is encrypted in your browser before submission.";
   } else if (fullPrompt.length < 10) {
     errors.fullPrompt =
       "Add at least 10 characters of prompt content so buyers receive meaningful value.";
@@ -112,7 +123,7 @@ export function validateListingForm(
   }
 
   if (!priceXlm) {
-    errors.priceXlm = "Enter a price in XLM — use a value greater than zero.";
+    errors.priceXlm = "Enter a price in XLM â€” use a value greater than zero.";
   } else {
     try {
       const price = xlmToStroops(priceXlm);
@@ -124,6 +135,57 @@ export function validateListingForm(
         error instanceof Error
           ? error.message
           : "Enter a valid XLM amount with up to 7 decimal places.";
+    }
+  }
+
+  if (coCreators.length > LISTING_LIMITS.maxCoCreators) {
+    errors.coCreators =
+      `Add up to ${LISTING_LIMITS.maxCoCreators} co-creators per listing.`;
+  } else if (coCreators.length > 0) {
+    const seenAddresses = new Set<string>();
+    let totalSplitBps = 0;
+
+    for (const coCreator of coCreators) {
+      const address = trim(coCreator.address).toUpperCase();
+      const sharePercent = trim(coCreator.sharePercent);
+      const parsedSharePercent = Number(sharePercent);
+
+      if (!address) {
+        errors.coCreators = "Enter a Stellar address for each co-creator.";
+        break;
+      }
+
+      if (!STELLAR_ADDRESS_PATTERN.test(address)) {
+        errors.coCreators =
+          "Use a valid Stellar public key for each co-creator address.";
+        break;
+      }
+
+      if (seenAddresses.has(address)) {
+        errors.coCreators =
+          "Each co-creator address can only appear once per listing.";
+        break;
+      }
+
+      if (!sharePercent || Number.isNaN(parsedSharePercent)) {
+        errors.coCreators =
+          "Enter a valid revenue share percentage for each co-creator.";
+        break;
+      }
+
+      if (parsedSharePercent <= 0) {
+        errors.coCreators =
+          "Each co-creator share must be greater than 0%.";
+        break;
+      }
+
+      totalSplitBps += Math.round(parsedSharePercent * 100);
+      seenAddresses.add(address);
+    }
+
+    if (!errors.coCreators && totalSplitBps > LISTING_LIMITS.maxSplitBps) {
+      errors.coCreators =
+        `Co-creator shares cannot exceed ${(LISTING_LIMITS.maxSplitBps / 100).toFixed(2)}% in total.`;
     }
   }
 
@@ -198,6 +260,7 @@ export function buildListingChecklistItems(
     { id: "fullPrompt", label: "Full prompt content" },
     { id: "priceXlm", label: "Price" },
     { id: "imageUrl", label: "Image URL" },
+    { id: "coCreators", label: "Co-creators" },
   ];
 
   for (const { id, label } of fieldChecks) {
@@ -236,7 +299,7 @@ export function buildListingChecklistItems(
       id: "prompt-length",
       label: "Full prompt seems short",
       status: "warn",
-      hint: "Buyers expect substantial prompt content — consider expanding it",
+      hint: "Buyers expect substantial prompt content â€” consider expanding it",
     });
   }
 
@@ -255,6 +318,20 @@ export function buildListingChecklistItems(
       label: "Price is very low",
       status: "warn",
       hint: "Listings under 0.5 XLM may signal low quality to buyers",
+    });
+  }
+
+  const totalRevenueSharePercent = (input.coCreators ?? []).reduce(
+    (sum, coCreator) => sum + (Number(trim(coCreator.sharePercent)) || 0),
+    0,
+  );
+
+  if (!errors.coCreators && totalRevenueSharePercent > 0) {
+    items.push({
+      id: "revenue-share",
+      label: "Revenue sharing configured",
+      status: "info",
+      hint: `${totalRevenueSharePercent.toFixed(2)}% shared across co-creators.`,
     });
   }
 

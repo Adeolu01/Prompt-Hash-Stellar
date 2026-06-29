@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import {
   ArrowUpRight,
   Bookmark,
@@ -6,6 +8,8 @@ import {
   LockKeyhole,
   ShieldCheck,
   TrendingUp,
+  Check,
+  Plus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +28,8 @@ export const PromptCard = ({
   isSaved,
   isSaving,
   onToggleSave,
+  isCompared = false,
+  onToggleCompare,
 }: {
   prompt: PromptRecord;
   hasAccess: boolean;
@@ -33,8 +39,12 @@ export const PromptCard = ({
   isSaving: boolean;
   // eslint-disable-next-line no-unused-vars
   onToggleSave: (_prompt: PromptRecord) => void;
+  isCompared?: boolean;
+  // eslint-disable-next-line no-unused-vars
+  onToggleCompare?: (_prompt: PromptRecord) => void;
 }) => {
   const isBestSeller = prompt.salesCount >= 10;
+  const reducedMotion = useReducedMotion();
 
   // Fetch review stats for this prompt
   const { data: reviewStats } = useQuery({
@@ -43,9 +53,22 @@ export const PromptCard = ({
     staleTime: 60_000, // Cache for 1 minute
   });
 
+  const hoverProps = reducedMotion
+    ? {}
+    : {
+        whileHover: { y: -4, scale: 1.01 },
+        whileTap: { scale: 0.98 },
+        transition: { type: "spring", stiffness: 300, damping: 20 },
+      };
+
   return (
+    <motion.div {...hoverProps}>
     <Card
-      className="group relative flex flex-col border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-all duration-300 hover:-translate-y-1 cursor-pointer overflow-hidden rounded-[24px]"
+      className={`group relative flex flex-col cursor-pointer overflow-hidden rounded-[24px] ${
+        isCompared
+          ? "border-emerald-500 bg-emerald-950/5 ring-1 ring-emerald-500/30"
+          : "border-white/5 bg-white/[0.02] hover:bg-white/[0.04]"
+      }`}
       onClick={() => openModal(prompt)}
       role="button"
       tabIndex={0}
@@ -76,7 +99,7 @@ export const PromptCard = ({
             </Badge>
           )}
         </div>
-        <div className="absolute top-4 right-4">
+        <div className="absolute top-4 right-4 flex flex-col gap-2 items-end z-10">
           <Button
             size="sm"
             variant="secondary"
@@ -94,6 +117,28 @@ export const PromptCard = ({
             )}
             {isSaved ? "Saved" : "Save"}
           </Button>
+          {onToggleCompare && (
+            <Button
+              size="sm"
+              variant="secondary"
+              className={`h-8 rounded-full border shadow-lg backdrop-blur-md transition-all px-3 text-xs ${
+                isCompared
+                  ? "bg-emerald-500 text-slate-950 border-emerald-400 font-bold hover:bg-emerald-600"
+                  : "bg-slate-950/75 text-white border-white/10 hover:bg-slate-900"
+              }`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleCompare(prompt);
+              }}
+            >
+              {isCompared ? (
+                <Check className="mr-1.5 h-3.5 w-3.5 text-slate-950" />
+              ) : (
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              {isCompared ? "Compared" : "Compare"}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -105,6 +150,7 @@ export const PromptCard = ({
             <span
               className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
               data-testid="badge-active"
+              title="This prompt is currently available for purchase"
             >
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
               Active
@@ -113,6 +159,7 @@ export const PromptCard = ({
             <span
               className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-500/10 text-slate-400 border border-slate-500/20"
               data-testid="badge-inactive"
+              title="This prompt is not currently available for purchase"
             >
               <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
               Inactive
@@ -124,6 +171,7 @@ export const PromptCard = ({
             <span
               className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20"
               data-testid="badge-purchased"
+              title="You have purchased a license for this prompt"
             >
               Purchased
             </span>
@@ -131,6 +179,7 @@ export const PromptCard = ({
             <span
               className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
               data-testid="badge-unlockable"
+              title="Purchase a license to unlock this prompt"
             >
               Unlockable
             </span>
@@ -141,6 +190,7 @@ export const PromptCard = ({
             <span
               className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20"
               data-testid="badge-verified"
+              title="Content integrity verified on the Stellar blockchain"
             >
               <ShieldCheck className="h-3 w-3 text-amber-400" />
               Verified
@@ -190,7 +240,9 @@ export const PromptCard = ({
                 </span>
               </div>
             ) : (
-              <span className="text-[11px] text-slate-500 italic">No ratings yet</span>
+              <span className="text-[11px] text-slate-500 italic">
+                No ratings yet
+              </span>
             )}
           </div>
         </div>
@@ -227,5 +279,6 @@ export const PromptCard = ({
         </div>
       </CardContent>
     </Card>
+    </motion.div>
   );
 };
